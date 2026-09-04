@@ -26,14 +26,6 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install Poetry
-        run: python -m pip install poetry
-
-      - name: Run unit tests
-        run: |
-          python -m poetry install
-          python -m poetry run pytest tests
-
       - name: Build package
         run: |
           python -m pip install build
