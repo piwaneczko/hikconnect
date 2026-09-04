@@ -38,6 +38,15 @@ class _HikConnectClient(ClientSession):
         finally:
             self.headers["sessionId"] = session_id
 
+    @contextmanager
+    def without_auth_headers(self):
+        keys = ("sessionId", "clientType", "lang", "featureCode")
+        saved = {k: self.headers.pop(k) for k in keys if k in self.headers}
+        try:
+            yield self
+        finally:
+            self.headers.update(saved)
+
 
 class HikConnect:
     # pylint: disable=too-many-public-methods
@@ -572,19 +581,34 @@ class HikConnect:
         )
 
     async def get_call_status(self, device_serial: str):
-        async with self.client.get(
-            f"{self.BASE_URL}/v3/devconfig/v1/call/{device_serial}/status"
-        ) as res:
-            res_json = await res.json()
+        session_id = self.client.headers.get("sessionId")
+        with self.client.without_auth_headers() as client:
+            async with client.get(
+                    f"{self.BASE_URL}/v3/devconfig/v1/call/{device_serial}/status",
+                    params={
+                        "sessionId": session_id,
+                        "clientType": "55",
+                        "lang": "en-US",
+                        "featureCode": _HikConnectClient.FEATURE_CODE,
+                    },
+            ) as res:
+                res_json = await res.json()
+
         log.debug("Got call status response '%s'", res_json)
         log.info("Got call status for device '%s'", device_serial)
-        if res_json["meta"]["code"] == 2003:
+
+        meta = res_json.get("meta") or {}
+        code = meta.get("code")
+        if code in (2003, 2009):
             raise DeviceOffline()
+        if code != 200 or "data" not in res_json:
+            raise DeviceOffline()
+
         data = json.loads(res_json["data"])
         try:
             status = self.CALL_STATUS_MAPPING[data["callStatus"]]
         except KeyError:
-            log.warning("Unknown call status: %s", data["callStatus"])
+            log.warning("Unknown call status: %s", data.get("callStatus"))
             status = "unknown"
 
         info = {}
