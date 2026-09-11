@@ -605,6 +605,34 @@ async def test_unlock_rejected_by_device(api):
             await api.unlock(_UNLOCK_DEVICE_SERIAL, channel_number=1, lock_index=0)
 
 
+async def test_unlock_malformed_data(api):
+    """Non-JSON / non-object `data` is normalized to UnlockError, not a raw parse error."""
+    with aioresponses() as mock:
+        mock.put(
+            _UNLOCK_URL,
+            payload={
+                "data": "not json",
+                "meta": {"code": 200, "message": "操作成功", "moreInfo": None},
+            },
+        )
+        with pytest.raises(UnlockError):
+            await api.unlock(_UNLOCK_DEVICE_SERIAL, channel_number=1, lock_index=0)
+
+
+async def test_unlock_non_object_data(api):
+    """Valid JSON that isn't an object (e.g. a list) is also normalized to UnlockError."""
+    with aioresponses() as mock:
+        mock.put(
+            _UNLOCK_URL,
+            payload={
+                "data": "[1, 2, 3]",
+                "meta": {"code": 200, "message": "操作成功", "moreInfo": None},
+            },
+        )
+        with pytest.raises(UnlockError):
+            await api.unlock(_UNLOCK_DEVICE_SERIAL, channel_number=1, lock_index=0)
+
+
 async def test_unlock_error_envelope(api):
     """API-level failure (non-200 meta.code) is also surfaced as UnlockError."""
     with aioresponses() as mock:

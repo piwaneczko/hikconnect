@@ -584,14 +584,21 @@ class HikConnect:
         if meta.get("code") != 200 or "data" not in res_json:
             raise UnlockError(f"Unexpected unlock response: {res_json!r}")
 
-        data = json.loads(res_json["data"])
+        try:
+            data = json.loads(res_json["data"])
+            rc = data["rc"]
+        except (TypeError, ValueError, KeyError) as exc:
+            raise UnlockError(
+                f"Malformed unlock response data: {res_json['data']!r}"
+            ) from exc
+
         # Empirically, "rc" 1 means the command was actually relayed to and executed by the
         # physical device. Other values (e.g. 14) have been observed together with concurrent
         # "device network abnormal" (meta.code 2009) responses from get_call_status() for the
         # same device, even though this unlock response's own "meta.code" still reported 200.
         # The exact meaning of every "rc" value is not documented anywhere; treat anything but
         # 1 as a failure until proven otherwise.
-        if data.get("rc") != 1:
+        if rc != 1:
             raise UnlockError(f"Device rejected unlock command: {data!r}")
 
         log.info(
